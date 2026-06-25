@@ -52,17 +52,17 @@ async function main() {
       })
     }
 
-    // GET / or /health — list all targets
+    // GET / or /health — list all targets (no URLs exposed)
     if (path === "/" || path === "/health") {
       const results = await Promise.all(
         config.targets.map(async (t) => {
           const ok = await checkTarget(t)
-          return { name: t.name, url: t.url, ok }
+          return { name: t.name, ok }
         }),
       )
 
       const lines = results.map((r) =>
-        `${r.ok ? "OK" : "DOWN"} ${r.name} ${r.url}`
+        `${r.ok ? "OK" : "KO"} ${r.name}`
       )
       const allOk = results.every((r) => r.ok)
 

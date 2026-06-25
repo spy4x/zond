@@ -48,7 +48,16 @@ export async function loadConfig(): Promise<Config> {
   }
 
   // 2. Try config file
-  const configPath = Deno.env.get("ZOND_CONFIG_PATH") || "./zond.yaml"
+  // Default: ./zond.yml. Fallback: ./zond.yaml.
+  let configPath = Deno.env.get("ZOND_CONFIG_PATH")
+  if (!configPath) {
+    try {
+      await Deno.stat("./zond.yml")
+      configPath = "./zond.yml"
+    } catch {
+      configPath = "./zond.yaml"
+    }
+  }
 
   try {
     const yaml = await Deno.readTextFile(configPath)

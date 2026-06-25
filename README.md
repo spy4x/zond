@@ -3,22 +3,19 @@
 [![Docker](https://img.shields.io/badge/docker-ghcr.io%2Fspy4x%2Fzond-blue)](https://github.com/spy4x/zond/pkgs/container/zond)
 [![Deno](https://img.shields.io/badge/deno-2.2-black?logo=deno)](https://deno.com)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![GitHub](https://img.shields.io/badge/github-spy4x%2Fzond-181717?logo=github)](https://github.com/spy4x/zond)
 
 **Zond** (Зонд — Russian: "probe") is a tiny internal health probe bridge.
 It receives external health check requests from monitoring systems
 like [Gatus](https://github.com/TwiN/gatus) and forwards them to internal
-containers via Docker DNS names — no authentication required, no sensitive
-data exposed.
+containers via Docker DNS names — no authentication required, no internal
+details exposed.
 
 ```
 ┌──────────┐     ┌──────────┐     ┌─────────────┐
 │  Gatus   │────▶│  Zond    │────▶│ hl-metube   │
 │ (cloud)  │     │ (home)   │     │ :8081       │
 └──────────┘     └──────────┘     └─────────────┘
-                      │
-                      ├──▶ hl-ollama:11434/api/tags
-                      ├──▶ hl-grafana:3000/api/health
-                      └──▶ hl-transmission:9091
 ```
 
 ## Why Zond?
@@ -38,45 +35,73 @@ No auth bypass, no password management.
     - "[STATUS] == 200"
 ```
 
-Compare to the alternative — managing a dedicated monitoring user, TOTP,
-and per-subject access control rules for each service.
-
 ## Features
 
-- **Zero attack surface** — returns `200` or `503`, no data, no tokens
+- **Zero attack surface** — returns `200` or `503`, no internal URLs, no tokens
 - **Single endpoint per service** — `GET /health/<name>`
-- **Bulk check** — `GET /` or `GET /health` lists all targets
-- **Config-driven** — YAML file or `ZOND_TARGETS` env var
+- **Bulk check** — `GET /` or `GET /health` lists all targets by name only
+- **Config-driven** — YAML file (`zond.yml` by default, falls back to `zond.yaml`) or `ZOND_TARGETS` env var
+- **Per-target timeout** — configure probe timeouts individually
 - **Docker-native** — 30MB Deno image, no dependencies
 - **Standalone binary** — `deno task compile` for bare-metal
 
 ## Quick start
 
+### 1. Config file
+
 ```yaml
-# zond.yaml
+# zond.yml
 port: 8080
 targets:
   - name: metube
     url: http://hl-metube:8081/
   - name: ollama
     url: http://hl-ollama:11434/api/tags
+    timeout: 10000  # ms, default 5000
+  - name: grafana
+    url: http://hl-grafana:3000/api/health
+    timeout: 3000
 ```
 
 ```bash
 docker run -p 8080:8080 \
-  -v $(pwd)/zond.yaml:/app/zond.yaml \
+  -v $(pwd)/zond.yml:/app/zond.yml \
   ghcr.io/spy4x/zond:latest
 
 curl http://localhost:8080/health/metube
 # ok
 ```
 
-### Via env vars
+### 2. Environment variables
 
 ```bash
 docker run -p 8080:8080 \
   -e ZOND_TARGETS="metube=http://hl-metube:8081/,ollama=http://hl-ollama:11434/api/tags" \
   ghcr.io/spy4x/zond:latest
+```
+
+Note: env var targets use the default timeout (5000ms). For custom timeouts,
+use a config file.
+
+### 3. Docker Compose
+
+```yaml
+services:
+  zond:
+    image: ghcr.io/spy4x/zond:latest
+    container_name: zond
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./zond.yml:/app/zond.yml:ro
+    networks:
+      - internal  # same network as your probes
+    deploy:
+      resources:
+        limits:
+          memory: 32M
+          cpus: "0.1"
 ```
 
 ## API
@@ -94,12 +119,13 @@ docker run -p 8080:8080 \
 Returns one line per target, overall `200` if all healthy:
 
 ```
-OK metube http://hl-metube:8081/
-OK ollama http://hl-ollama:11434/api/tags
-DOWN grafana http://hl-grafana:3000/api/health
+OK metube
+KO grafana
+OK ollama
 ```
 
-Overall status is `503` if any target is down.
+No internal URLs or other details exposed. Overall status is `503` if any
+target is down.
 
 ## Configuration
 
@@ -111,16 +137,16 @@ Overall status is `503` if any target is down.
 | `targets[].timeout` | — | `5000` | Request timeout in ms |
 
 Config resolution order:
-1. `ZOND_TARGETS` env var
-2. `ZOND_CONFIG_PATH` env var → YAML file
-3. `./zond.yaml` in working directory
+1. `ZOND_TARGETS` env var (default timeout applies to all)
+2. `ZOND_CONFIG_PATH` env var → YAML file (supports `.yml` and `.yaml`)
+3. `./zond.yml` in working directory (falls back to `./zond.yaml`)
 
 ## Docker
 
 ```bash
 docker build -t ghcr.io/spy4x/zond:latest .
 docker run --network proxy \
-  -v $(pwd)/zond.yaml:/app/zond.yaml \
+  -v $(pwd)/zond.yml:/app/zond.yml \
   ghcr.io/spy4x/zond:latest
 ```
 
@@ -148,10 +174,10 @@ process is listening but returning 5xx errors.
 
 ## Why no authentication?
 
-Zond returns only `ok` or `unreachable`. No data to protect, no session
-to steal, no action to perform. Adding auth would reintroduce the exact
-problem Zond solves. If you must, proxy it through your SSO — but the
-health endpoint itself carries zero risk.
+Zond returns only `ok` or `ko`. No data to protect, no session to steal,
+no action to perform. Adding auth would reintroduce the exact problem Zond
+solves. If you must, proxy it through your SSO — but the health endpoint
+itself carries zero risk.
 
 ## License
 
