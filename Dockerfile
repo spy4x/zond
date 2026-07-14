@@ -21,6 +21,10 @@ FROM gcr.io/distroless/static-debian12:nonroot
 
 COPY --from=build /out/zond /usr/local/bin/zond
 
+# WORKDIR makes the relative config path ./zond.yaml resolve here,
+# matching the volume mount point used in docker-compose.
+WORKDIR /app
+
 ENV ZOND_PORT=8080
 EXPOSE 8080
 
