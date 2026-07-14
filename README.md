@@ -1,7 +1,7 @@
 # Zond 🚀
 
 [![Docker](https://img.shields.io/badge/docker-ghcr.io%2Fspy4x%2Fzond-blue)](https://github.com/spy4x/zond/pkgs/container/zond)
-[![Deno](https://img.shields.io/badge/deno-2.2-black?logo=deno)](https://deno.com)
+[![Go](https://img.shields.io/badge/go-1.25-00ADD8?logo=go)](https://go.dev)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![GitHub](https://img.shields.io/badge/github-spy4x%2Fzond-181717?logo=github)](https://github.com/spy4x/zond)
 
@@ -42,8 +42,9 @@ No auth bypass, no password management.
 - **Bulk check** — `GET /` or `GET /health` lists all targets by name only
 - **Config-driven** — YAML file (`zond.yml` by default, falls back to `zond.yaml`) or `ZOND_TARGETS` env var
 - **Per-target timeout** — configure probe timeouts individually
-- **Docker-native** — 30MB Deno image, no dependencies
-- **Standalone binary** — `deno task compile` for bare-metal
+- **Parallel probes** — every target probed concurrently, fan-out bounded
+- **Tiny image** — ~10MB distroless Docker image, single static binary
+- **Single dep** — one external library (`go.yaml.in/yaml/v3`)
 
 ## Quick start
 
@@ -134,7 +135,7 @@ target is down.
 | `port` | `ZOND_PORT` | `8080` | HTTP listen port |
 | `targets[].name` | — | required | URL slug in `/health/<name>` |
 | `targets[].url` | — | required | Internal URL to probe (Docker DNS or any) |
-| `targets[].timeout` | — | `5000` | Request timeout in ms |
+| `targets[].timeout` | — | `5000` | Per-target probe timeout in ms |
 
 Config resolution order:
 1. `ZOND_TARGETS` env var (default timeout applies to all)
@@ -153,18 +154,33 @@ docker run --network proxy \
 ## Compile (standalone)
 
 ```bash
-deno task compile
+go build -trimpath -ldflags="-s -w" -o zond ./cmd/zond
 ./zond
 ```
 
 ## Development
 
 ```bash
-deno task dev    # run locally
-deno task check  # type-check
-deno task lint   # lint
-deno task fmt    # format
+go test ./...            # unit tests
+go test -race ./...      # race detector
+go vet ./...             # static analysis
+gofmt -l .               # formatting check (empty = clean)
+go build ./...           # compile everything
 ```
+
+## Architecture
+
+```
+cmd/zond/main.go              — entrypoint, signal handling, HTTP server lifecycle
+internal/config/config.go     — YAML + env loading, defaults, validation
+internal/probe/probe.go       — HTTP GET with timeout, parallel fan-out
+internal/probe/drain.go       — bounded body drain for keep-alive
+internal/server/server.go     — HTTP handlers, routing, status codes
+```
+
+Dependency policy: **stdlib first**, one external dep (`go.yaml.in/yaml/v3`)
+for YAML parsing. No router, no logger lib, no DI framework — Go 1.25 stdlib
+covers it all.
 
 ## Why not TCP checks?
 
