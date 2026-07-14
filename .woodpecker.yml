@@ -1,5 +1,10 @@
 steps:
   check:
-    image: denoland/deno:2.9.0
+    image: golang:1.25-alpine
     commands:
-      - deno task check
+      - go version
+      - go mod verify
+      - go vet ./...
+      - gofmt -l .
+      - go test -race -count=1 ./...
+      - go build ./...

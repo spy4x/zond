@@ -1,5 +1,15 @@
 .git
 .gitignore
-README.md
-zond.yaml
+.github
+.opencode
+.idea
+.vscode
 *.md
+!README.md
+zond
+zond.yml
+zond.yaml
+Dockerfile
+.dockerignore
+.woodpecker.yml
+LICENSE

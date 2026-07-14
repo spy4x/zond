@@ -1,16 +1,28 @@
-# Zond — Internal health probe bridge
-#
-FROM denoland/deno:alpine-2.2.8
+# Build stage — pinned for reproducibility
+FROM golang:1.25-alpine AS build
 
-WORKDIR /app
+WORKDIR /src
 
-COPY src/ src/
-COPY deno.jsonc .
+# Cache deps separately from source for faster rebuilds.
+COPY go.mod go.sum ./
+RUN go mod download
 
-RUN deno cache src/main.ts
+COPY . .
+
+# Static, stripped, fully static binary. CGO disabled for portability.
+RUN CGO_ENABLED=0 GOOS=linux go build \
+    -trimpath \
+    -ldflags="-s -w" \
+    -o /out/zond \
+    ./cmd/zond
+
+# Runtime stage — distroless for minimal attack surface (~10MB).
+FROM gcr.io/distroless/static-debian12:nonroot
+
+COPY --from=build /out/zond /usr/local/bin/zond
 
 ENV ZOND_PORT=8080
-
 EXPOSE 8080
 
-CMD ["deno", "run", "-A", "src/main.ts"]
+USER nonroot:nonroot
+ENTRYPOINT ["/usr/local/bin/zond"]
