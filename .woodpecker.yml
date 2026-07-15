@@ -8,7 +8,10 @@ steps:
       - go mod verify
       - go vet ./...
       - gofmt -l .
-      # gcc/musl-dev needed for -race (cgo required)
+      # gcc/musl-dev needed for `go test -race` (cgo required).
+      # alpine Go images ship without a C toolchain by default.
+      # ~3s cold apk fetch — caching would require a custom CI image,
+      # not worth it for a single 3-step pipeline.
       - apk add --no-cache gcc musl-dev
       - go test -race -count=1 ./...
       - go build ./...

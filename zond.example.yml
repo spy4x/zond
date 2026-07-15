@@ -1,4 +1,12 @@
-# Zond example config — copy to zond.yml and adjust.
+# Zond example config — copy to `zond.yml` (or `zond.yaml`)
+# and mount or place at a path the running container can read.
+#
+# Default resolution order:
+#   1. $ZOND_CONFIG_PATH env var        (path to this file)
+#   2. ./zond.yml in working directory  (falls back to ./zond.yaml)
+#
+# In the official container image the working directory is /app, so the
+# volume mount path /app/zond.yml maps to this file.
 
 port: 8080
 

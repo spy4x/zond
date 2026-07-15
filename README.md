@@ -41,8 +41,9 @@ No auth bypass, no password management.
 - **Single endpoint per service** — `GET /health/<name>`
 - **Bulk check** — `GET /` or `GET /health` lists all targets by name only
 - **Config-driven** — YAML file (`zond.yml` by default, falls back to `zond.yaml`) or `ZOND_TARGETS` env var
-- **Per-target timeout** — configure probe timeouts individually
+- **Per-target timeout** — configure probe timeouts individually (ms in YAML)
 - **Parallel probes** — every target probed concurrently, fan-out bounded
+- **Detached probe context** — client disconnect cannot poison fan-out results
 - **Tiny image** — ~10MB distroless Docker image, single static binary
 - **Single dep** — one external library (`go.yaml.in/yaml/v3`)
 
@@ -111,9 +112,12 @@ services:
 
 | Response | Status | Meaning |
 |---|---|---|
-| `ok\n` | `200` | Target responded 2xx/3xx |
+| `ok\n` | `200` | Target responded 2xx or 3xx |
 | `unreachable\n` | `503` | Connection failed or 4xx/5xx |
 | `unknown target: <name>\n` | `404` | Target not in config |
+
+Zond does NOT follow redirects — the 3xx response itself is the contract.
+A `302` from `/` to `/login` is healthy; `404` is not.
 
 ### `GET /` or `GET /health`
 
@@ -133,14 +137,19 @@ target is down.
 | Option | Env var | Default | Description |
 |---|---|---|---|
 | `port` | `ZOND_PORT` | `8080` | HTTP listen port |
-| `targets[].name` | — | required | URL slug in `/health/<name>` |
+| `targets[].name` | — | required | URL slug in `/health/<name>`, must be unique |
 | `targets[].url` | — | required | Internal URL to probe (Docker DNS or any) |
-| `targets[].timeout` | — | `5000` | Per-target probe timeout in ms |
+| `targets[].timeout` | — | `5000` | Per-target probe timeout in **milliseconds** |
 
-Config resolution order:
-1. `ZOND_TARGETS` env var (default timeout applies to all)
+Config resolution (highest priority first):
+1. `ZOND_TARGETS` env var (overrides targets entirely; default timeout applies; uses target name from `name=url` pairs)
 2. `ZOND_CONFIG_PATH` env var → YAML file (supports `.yml` and `.yaml`)
 3. `./zond.yml` in working directory (falls back to `./zond.yaml`)
+
+For `port`: `ZOND_PORT` env var overrides the YAML `port` field. Only `ZOND_TARGETS`
+short-circuits both — when it is set, the YAML file is not consulted at all.
+
+Duplicate target names are rejected at load time (env or YAML).
 
 ## Docker
 
@@ -151,11 +160,17 @@ docker run --network proxy \
   ghcr.io/spy4x/zond:latest
 ```
 
+The container image includes a `HEALTHCHECK` that calls `zond -healthcheck`,
+which connects to the listening socket. The compose healthcheck can remain a
+pure HTTP probe (`wget --spider`) or be replaced with `CMD-SHELL`-less form —
+either works.
+
 ## Compile (standalone)
 
 ```bash
 go build -trimpath -ldflags="-s -w" -o zond ./cmd/zond
 ./zond
+./zond -healthcheck && echo alive
 ```
 
 ## Development
@@ -171,11 +186,11 @@ go build ./...           # compile everything
 ## Architecture
 
 ```
-cmd/zond/main.go              — entrypoint, signal handling, HTTP server lifecycle
-internal/config/config.go     — YAML + env loading, defaults, validation
-internal/probe/probe.go       — HTTP GET with timeout, parallel fan-out
-internal/probe/drain.go       — bounded body drain for keep-alive
-internal/server/server.go     — HTTP handlers, routing, status codes
+cmd/zond/main.go              — entrypoint, -healthcheck flag, http.Server lifecycle
+internal/config/config.go     — YAML + env loader, validation, duplicate-name rejection
+internal/probe/probe.go       — HTTP GET with per-target timeout, parallel fan-out, redirect contract
+internal/probe/drain.go       — bounded body drain for HTTP keep-alive
+internal/server/server.go     — HTTP handlers, routing, response codes
 ```
 
 Dependency policy: **stdlib first**, one external dep (`go.yaml.in/yaml/v3`)
