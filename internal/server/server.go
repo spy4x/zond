@@ -10,7 +10,6 @@ package server
 import (
 	"context"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"sort"
@@ -22,23 +21,16 @@ import (
 
 // Config holds the dependencies needed to construct a Server.
 type Config struct {
-	Targets []Target
+	Targets []probe.Target
 	Checker *probe.Checker
 	Logger  *slog.Logger
-}
-
-// Target is the read-only view of a configured upstream used by handlers.
-type Target struct {
-	Name    string
-	URL     string
-	Timeout time.Duration
 }
 
 // Server is the HTTP entry point.
 type Server struct {
 	cfg      Config
 	mux      *http.ServeMux
-	byName   map[string]Target
+	byName   map[string]probe.Target
 	allOrder []string // stable display order
 }
 
@@ -47,7 +39,7 @@ func New(cfg Config) *Server {
 	s := &Server{
 		cfg:    cfg,
 		mux:    http.NewServeMux(),
-		byName: make(map[string]Target, len(cfg.Targets)),
+		byName: make(map[string]probe.Target, len(cfg.Targets)),
 	}
 	for _, t := range cfg.Targets {
 		s.byName[t.Name] = t
@@ -61,8 +53,16 @@ func New(cfg Config) *Server {
 	return s
 }
 
-// Handler returns the registered http.Handler (for use with http.Server).
+// Handler returns the registered http.Handler.
 func (s *Server) Handler() http.Handler { return s.mux }
+
+// overallTimeout returns the upper bound for fan-out probes —
+// the longest per-target timeout plus a small safety margin.
+// Used to construct a context that survives client disconnect
+// so probes can still report accurate results.
+func overallTimeout(targets []probe.Target) time.Duration {
+	return probe.MaxTimeout(targets) + time.Second
+}
 
 func (s *Server) handleOne(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
@@ -72,20 +72,20 @@ func (s *Server) handleOne(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	probeCtx := s.probeCtx(r)
-	res := s.cfg.Checker.Check(probeCtx, target.Name, target.URL, target.Timeout)
+	// Detach probe lifetime from the request: a slow client cancelling
+	// the request must not register as "all targets down".
+	ctx, cancel := context.WithTimeout(context.Background(), overallTimeout(s.cfg.Targets))
+	defer cancel()
+
+	res := s.cfg.Checker.Check(ctx, target.Name, target.URL, target.Timeout)
 	writeProbeResult(w, res)
 }
 
-func (s *Server) handleAll(w http.ResponseWriter, r *http.Request) {
-	targets := make([]probe.Target, 0, len(s.allOrder))
-	for _, name := range s.allOrder {
-		t := s.byName[name]
-		targets = append(targets, probe.Target{Name: t.Name, URL: t.URL, Timeout: t.Timeout})
-	}
+func (s *Server) handleAll(w http.ResponseWriter, _ *http.Request) {
+	ctx, cancel := context.WithTimeout(context.Background(), overallTimeout(s.cfg.Targets))
+	defer cancel()
 
-	probeCtx := s.probeCtx(r)
-	results := s.cfg.Checker.CheckAll(probeCtx, targets)
+	results := s.cfg.Checker.CheckAll(ctx, s.cfg.Targets)
 
 	var b strings.Builder
 	allOK := true
@@ -110,18 +110,13 @@ func (s *Server) handleAll(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte(b.String()))
 }
 
-func (s *Server) probeCtx(r *http.Request) context.Context {
-	return r.Context()
-}
-
-// writeProbeResult writes "ok"/"unreachable" with 200 or 503.
 func writeProbeResult(w http.ResponseWriter, res probe.Result) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	if res.OK {
 		w.WriteHeader(http.StatusOK)
-		_, _ = io.WriteString(w, "ok\n")
+		_, _ = fmt.Fprint(w, "ok\n")
 		return
 	}
 	w.WriteHeader(http.StatusServiceUnavailable)
-	_, _ = io.WriteString(w, "unreachable\n")
+	_, _ = fmt.Fprint(w, "unreachable\n")
 }

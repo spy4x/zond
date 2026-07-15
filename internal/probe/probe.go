@@ -1,4 +1,8 @@
 // Package probe runs HTTP health checks against upstream targets.
+//
+// A target is "healthy" iff the upstream responds with a 2xx or 3xx
+// status within its per-target timeout. Zond deliberately does NOT
+// follow redirects — the 3xx itself is the contract.
 package probe
 
 import (
@@ -8,36 +12,14 @@ import (
 	"time"
 )
 
-// Target is the minimum interface needed to probe a single upstream.
-// Kept independent of the config package to avoid import cycles
-// and to make this package trivially testable.
+// DefaultTimeout is the per-target probe timeout used when none is set.
+const DefaultTimeout = 5 * time.Second
+
+// Target is the minimum input to probe a single upstream.
 type Target struct {
 	Name    string
 	URL     string
 	Timeout time.Duration
-}
-
-// Checker performs HTTP GET probes against targets.
-// Safe for concurrent use; the underlying http.Client handles many in flight.
-type Checker struct {
-	client *http.Client
-}
-
-// New returns a Checker using defaultTimeout as the upper bound for any
-// per-target timeout that resolves to zero.
-func New(defaultTimeout time.Duration) *Checker {
-	return &Checker{
-		client: &http.Client{
-			Timeout: defaultTimeout,
-			// Follow up to 5 redirects — 3xx counts as a healthy upstream.
-			CheckRedirect: func(req *http.Request, via []*http.Request) error {
-				if len(via) >= 5 {
-					return http.ErrUseLastResponse
-				}
-				return nil
-			},
-		},
-	}
 }
 
 // Result is the outcome of probing a single target.
@@ -46,11 +28,35 @@ type Result struct {
 	OK   bool
 }
 
+// Checker performs HTTP GET probes against targets.
+// Safe for concurrent use; the underlying http.Client handles many in flight.
+type Checker struct {
+	client *http.Client
+}
+
+// New returns a Checker. The client transport times out per request via
+// context.WithTimeout; DefaultTimeout is the fallback for callers that
+// pass zero.
+func New() *Checker {
+	return &Checker{
+		client: &http.Client{
+			// Zond treats 3xx as a healthy upstream — inspect the 3xx
+			// response itself instead of following to the redirected URL.
+			// Following would silently convert 302→200 into a false-OK
+			// for a target that is in fact redirecting away from itself.
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		},
+	}
+}
+
 // Check probes one target. Returns OK=true on any 2xx or 3xx response.
 // Any error (timeout, DNS, connection refused, malformed URL) → OK=false.
+// A zero timeout falls back to DefaultTimeout.
 func (c *Checker) Check(ctx context.Context, name, url string, timeout time.Duration) Result {
 	if timeout <= 0 {
-		timeout = 5 * time.Second
+		timeout = DefaultTimeout
 	}
 	reqCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
@@ -66,9 +72,8 @@ func (c *Checker) Check(ctx context.Context, name, url string, timeout time.Dura
 	if err != nil {
 		return Result{Name: name, OK: false}
 	}
-	// Drain body so the underlying connection can be reused.
 	defer resp.Body.Close()
-	_, _ = drain(resp.Body)
+	_ = drain(resp.Body)
 
 	return Result{Name: name, OK: resp.StatusCode >= 200 && resp.StatusCode < 400}
 }
@@ -88,4 +93,19 @@ func (c *Checker) CheckAll(ctx context.Context, targets []Target) []Result {
 	}
 	wg.Wait()
 	return results
+}
+
+// MaxTimeout returns the largest Timeout across the targets,
+// or DefaultTimeout when no target has a positive timeout.
+func MaxTimeout(targets []Target) time.Duration {
+	var max time.Duration
+	for _, t := range targets {
+		if t.Timeout > max {
+			max = t.Timeout
+		}
+	}
+	if max <= 0 {
+		return DefaultTimeout
+	}
+	return max
 }

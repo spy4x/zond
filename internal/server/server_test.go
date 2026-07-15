@@ -12,7 +12,7 @@ import (
 	"github.com/spy4x/zond/internal/probe"
 )
 
-func newTestServer(t *testing.T) (*httptest.Server, *Server) {
+func newTestServer(t *testing.T) *Server {
 	t.Helper()
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /ok", func(w http.ResponseWriter, _ *http.Request) {
@@ -24,20 +24,18 @@ func newTestServer(t *testing.T) (*httptest.Server, *Server) {
 	upstream := httptest.NewServer(mux)
 	t.Cleanup(upstream.Close)
 
-	cfg := Config{
-		Targets: []Target{
+	return New(Config{
+		Targets: []probe.Target{
 			{Name: "good", URL: upstream.URL + "/ok", Timeout: time.Second},
 			{Name: "bad", URL: upstream.URL + "/ko", Timeout: time.Second},
 		},
-		Checker: probe.New(time.Second),
+		Checker: probe.New(),
 		Logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
-	}
-	return upstream, New(cfg)
+	})
 }
 
 func TestHandleOneOK(t *testing.T) {
-	upstream, s := newTestServer(t)
-	defer upstream.Close()
+	s := newTestServer(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/health/good", nil)
 	rec := httptest.NewRecorder()
@@ -52,8 +50,7 @@ func TestHandleOneOK(t *testing.T) {
 }
 
 func TestHandleOneKO(t *testing.T) {
-	upstream, s := newTestServer(t)
-	defer upstream.Close()
+	s := newTestServer(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/health/bad", nil)
 	rec := httptest.NewRecorder()
@@ -68,8 +65,7 @@ func TestHandleOneKO(t *testing.T) {
 }
 
 func TestHandleOneUnknown(t *testing.T) {
-	upstream, s := newTestServer(t)
-	defer upstream.Close()
+	s := newTestServer(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/health/nope", nil)
 	rec := httptest.NewRecorder()
@@ -81,8 +77,7 @@ func TestHandleOneUnknown(t *testing.T) {
 }
 
 func TestHandleAllMixed(t *testing.T) {
-	upstream, s := newTestServer(t)
-	defer upstream.Close()
+	s := newTestServer(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	rec := httptest.NewRecorder()
@@ -101,8 +96,7 @@ func TestHandleAllMixed(t *testing.T) {
 }
 
 func TestHandleRoot(t *testing.T) {
-	upstream, s := newTestServer(t)
-	defer upstream.Close()
+	s := newTestServer(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
@@ -114,8 +108,7 @@ func TestHandleRoot(t *testing.T) {
 }
 
 func TestNotFound(t *testing.T) {
-	upstream, s := newTestServer(t)
-	defer upstream.Close()
+	s := newTestServer(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/wat", nil)
 	rec := httptest.NewRecorder()
