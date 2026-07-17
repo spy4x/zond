@@ -17,6 +17,8 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
     ./cmd/zond
 
 # Runtime stage — distroless for minimal attack surface (~10MB).
+# `static` variant: no shell, no wget/curl. The binary itself does
+# the healthcheck via its own `-healthcheck` flag.
 FROM gcr.io/distroless/static-debian12:nonroot
 
 COPY --from=build /out/zond /usr/local/bin/zond
@@ -27,6 +29,12 @@ WORKDIR /app
 
 ENV ZOND_PORT=8080
 EXPOSE 8080
+
+# Self-probe: binary connects to its own listening socket.
+# JSON-array form (no shell) is required because distroless-static
+# has no shell. exit 0 = alive, exit 1 = dead.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD ["/usr/local/bin/zond", "-healthcheck"]
 
 USER nonroot:nonroot
 ENTRYPOINT ["/usr/local/bin/zond"]

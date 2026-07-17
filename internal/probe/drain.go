@@ -1,12 +1,14 @@
 package probe
 
-import (
-	"io"
-)
+import "io"
 
-// drain discards up to 4 KiB of response body so the keep-alive connection
-// can be returned to the pool. Anything larger is left for GC.
-func drain(r io.Reader) (int64, error) {
-	_, err := io.Copy(io.Discard, io.LimitReader(r, 4096))
-	return 0, err
+// maxDrainBytes bounds the body we read from a probe response so the
+// underlying connection can be returned to the pool. Anything larger
+// is left for the runtime to GC when the body closes.
+const maxDrainBytes = 4096
+
+// drain discards up to maxDrainBytes of a response body.
+func drain(r io.Reader) error {
+	_, err := io.Copy(io.Discard, io.LimitReader(r, maxDrainBytes))
+	return err
 }
