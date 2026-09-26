@@ -80,3 +80,16 @@ Woodpecker pipeline (`.woodpecker.yml`) on `golang:1.25-alpine`:
 - `go build ./...`
 
 Local dev must pass the same checks before commit.
+
+## Docs
+
+`README.md` is the one-screen pitch: tagline, diagram, quick start, the API in one table. The
+reference lives in `docs/`: `api.md`, `configuration.md`, `self-hosting.md` and
+`how-it-works.md`. The README's diagram is hand-written SVG in two files,
+`docs/diagram-light.svg` and `docs/diagram-dark.svg`, chosen by GitHub's theme through
+`<picture>`. They share every coordinate and differ only in colours: edit the light one, then
+regenerate the dark one with the colour swap below, so they never drift.
+
+```bash
+sed -e 's/#59636e/#9198a1/g; s/#1f2328/#f0f6fc/g; s/#f6f8fa/#151b23/g; s/#d1d9e0/#3d444d/g; s/#ddf4ff/#0c2d6b/g; s/#0969da/#4493f8/g' docs/diagram-light.svg > docs/diagram-dark.svg
+```

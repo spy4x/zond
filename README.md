@@ -1,215 +1,122 @@
-# Zond 🚀
+<div align="center">
 
-[![Docker](https://img.shields.io/badge/docker-ghcr.io%2Fspy4x%2Fzond-blue)](https://github.com/spy4x/zond/pkgs/container/zond)
-[![Go](https://img.shields.io/badge/go-1.25-00ADD8?logo=go)](https://go.dev)
+# zond
+
+**Health checks for self-hosted services behind an SSO proxy, without a
+monitoring login.**
+
+[![CI](https://ci.antonshubin.com/api/badges/5/status.svg)](https://ci.antonshubin.com/repos/5)
+[![Docker](https://img.shields.io/badge/docker-ghcr.io%2Fspy4x%2Fzond-blue?logo=docker)](https://github.com/users/spy4x/packages/container/package/zond)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![GitHub](https://img.shields.io/badge/github-spy4x%2Fzond-181717?logo=github)](https://github.com/spy4x/zond)
 
-**Zond** (Зонд — Russian: "probe") is a tiny internal health probe bridge.
-It receives external health check requests from monitoring systems
-like [Gatus](https://github.com/TwiN/gatus) and forwards them to internal
-containers via Docker DNS names — no authentication required, no internal
-details exposed.
+[**Running in production →**](https://probe-home.antonshubin.com) ·
+[API](docs/api.md) · [Configuration](docs/configuration.md) ·
+[Self-hosting](docs/self-hosting.md) · [How it works](docs/how-it-works.md)
 
-```
-┌──────────┐     ┌──────────┐     ┌─────────────┐
-│  Gatus   │────▶│  Zond    │────▶│ hl-metube   │
-│ (cloud)  │     │ (home)   │     │ :8081       │
-└──────────┘     └──────────┘     └─────────────┘
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/diagram-dark.svg">
+  <img src="docs/diagram-light.svg" alt="You reach metube through the SSO proxy. Gatus, in the cloud, asks zond for /health/metube instead. zond runs on the same Docker network as metube, sends it a plain HTTP GET without logging in, and answers Gatus with 200 ok or 503." width="800">
+</picture>
 
-## Why Zond?
+</div>
 
-Monitoring services behind an SSO proxy (Authelia, Authentik) is painful.
-You either accept `302` redirects as "healthy" or expose your apps with
-dedicated monitoring users. Zond sits **_beside_** your containers (same
-Docker network) and probes them directly, returning only `200` or `503`.
-No auth bypass, no password management.
+Your monitor asks `https://zond.example.com/health/metube`. zond, running on the
+same Docker network as metube, sends metube a plain HTTP GET and answers `200 ok`
+or `503 unreachable`. The monitor never meets the login page, and zond never
+tells it an internal URL. **zond** (зонд) is Russian for "probe".
 
-**One line in Gatus:**
+Put an SSO proxy such as Authelia or Authentik in front of your services, and an
+outside monitor like [Gatus](https://github.com/TwiN/gatus) sees a `302` to the
+login page for every one of them. You either count that redirect as healthy or
+give the monitor its own account. zond checks each service from beside it
+instead. I run it on my home server; its live status is at
+[probe-home.antonshubin.com](https://probe-home.antonshubin.com).
+
+## Why zond
+
+- **Says nothing it doesn't have to.** Answers are `ok`, `unreachable` and
+  target names. No internal URLs, no response bodies, no tokens.
+- **One URL per service.** `GET /health/<name>` for one target; `GET /health`
+  checks them all at once and lists each by name.
+- **A real HTTP check.** It sends a request and reads the status, so a service
+  that listens but answers `5xx` counts as down, unlike a TCP port check.
+- **Redirects are healthy.** zond never follows them: a `302` to `/login` is
+  up, a `404` is not.
+- **One YAML file.** Or one `ZOND_TARGETS` environment variable. Per-target
+  timeouts in YAML, duplicate names rejected at startup.
+- **Small and plain.** A static Go binary on the standard library plus one YAML
+  parser, shipped as a distroless, non-root image.
+
+**Use it if** an SSO proxy stands between your monitor and your self-hosted
+services. **Skip it if** your monitor already runs inside that network, or you
+need response times, metrics or content checks.
+
+## Quick start
+
+Add zond to the Compose file that runs your services, so it shares their
+network:
 
 ```yaml
+# compose.yml
+services:
+  zond:
+    image: ghcr.io/spy4x/zond:latest
+    restart: unless-stopped
+    ports: ["8080:8080"]
+    volumes: ["./zond.yml:/app/zond.yml:ro,z"]
+```
+
+```yaml
+# zond.yml
+targets:
+  - name: metube
+    url: http://hl-metube:8081/
+```
+
+```bash
+docker compose up -d && curl http://localhost:8080/health/metube   # ok
+```
+
+Then publish zond through your reverse proxy, outside the SSO, and point your
+monitor at it. More setups: [self-hosting.md](docs/self-hosting.md).
+
+## Point your monitor at it
+
+```yaml
+# Gatus
 - name: Metube
   url: "https://zond.example.com/health/metube"
   conditions:
     - "[STATUS] == 200"
 ```
 
-## Features
+| Request              | Answers                                                        |
+| -------------------- | -------------------------------------------------------------- |
+| `GET /health/<name>` | `200 ok`, `503 unreachable`, or `404` for an unknown name      |
+| `GET /health`, `/`   | one `OK <name>` or `KO <name>` line each; `503` if any is down |
 
-- **Zero attack surface** — returns `200` or `503`, no internal URLs, no tokens
-- **Single endpoint per service** — `GET /health/<name>`
-- **Bulk check** — `GET /` or `GET /health` lists all targets by name only
-- **Config-driven** — YAML file (`zond.yml` by default, falls back to `zond.yaml`) or `ZOND_TARGETS` env var
-- **Per-target timeout** — configure probe timeouts individually (ms in YAML)
-- **Parallel probes** — every target probed concurrently, fan-out bounded
-- **Detached probe context** — client disconnect cannot poison fan-out results
-- **Tiny image** — ~10MB distroless Docker image, single static binary
-- **Single dep** — one external library (`go.yaml.in/yaml/v3`)
-
-## Quick start
-
-### 1. Config file
-
-```yaml
-# zond.yml
-port: 8080
-targets:
-  - name: metube
-    url: http://hl-metube:8081/
-  - name: ollama
-    url: http://hl-ollama:11434/api/tags
-    timeout: 10000  # ms, default 5000
-  - name: grafana
-    url: http://hl-grafana:3000/api/health
-    timeout: 3000
-```
-
-```bash
-docker run -p 8080:8080 \
-  -v $(pwd)/zond.yml:/app/zond.yml \
-  ghcr.io/spy4x/zond:latest
-
-curl http://localhost:8080/health/metube
-# ok
-```
-
-### 2. Environment variables
-
-```bash
-docker run -p 8080:8080 \
-  -e ZOND_TARGETS="metube=http://hl-metube:8081/,ollama=http://hl-ollama:11434/api/tags" \
-  ghcr.io/spy4x/zond:latest
-```
-
-Note: env var targets use the default timeout (5000ms). For custom timeouts,
-use a config file.
-
-### 3. Docker Compose
-
-```yaml
-services:
-  zond:
-    image: ghcr.io/spy4x/zond:latest
-    container_name: zond
-    restart: unless-stopped
-    ports:
-      - "8080:8080"
-    volumes:
-      - ./zond.yml:/app/zond.yml:ro
-    networks:
-      - internal  # same network as your probes
-    deploy:
-      resources:
-        limits:
-          memory: 32M
-          cpus: "0.1"
-```
-
-## API
-
-### `GET /health/<name>`
-
-| Response | Status | Meaning |
-|---|---|---|
-| `ok\n` | `200` | Target responded 2xx or 3xx |
-| `unreachable\n` | `503` | Connection failed or 4xx/5xx |
-| `unknown target: <name>\n` | `404` | Target not in config |
-
-Zond does NOT follow redirects — the 3xx response itself is the contract.
-A `302` from `/` to `/login` is healthy; `404` is not.
-
-### `GET /` or `GET /health`
-
-Returns one line per target, overall `200` if all healthy:
-
-```
-OK metube
-KO grafana
-OK ollama
-```
-
-No internal URLs or other details exposed. Overall status is `503` if any
-target is down.
-
-## Configuration
-
-| Option | Env var | Default | Description |
-|---|---|---|---|
-| `port` | `ZOND_PORT` | `8080` | HTTP listen port |
-| `targets[].name` | — | required | URL slug in `/health/<name>`, must be unique |
-| `targets[].url` | — | required | Internal URL to probe (Docker DNS or any) |
-| `targets[].timeout` | — | `5000` | Per-target probe timeout in **milliseconds** |
-
-Config resolution (highest priority first):
-1. `ZOND_TARGETS` env var (overrides targets entirely; default timeout applies; uses target name from `name=url` pairs)
-2. `ZOND_CONFIG_PATH` env var → YAML file (supports `.yml` and `.yaml`)
-3. `./zond.yml` in working directory (falls back to `./zond.yaml`)
-
-For `port`: `ZOND_PORT` env var overrides the YAML `port` field. Only `ZOND_TARGETS`
-short-circuits both — when it is set, the YAML file is not consulted at all.
-
-Duplicate target names are rejected at load time (env or YAML).
-
-## Docker
-
-```bash
-docker build -t ghcr.io/spy4x/zond:latest .
-docker run --network proxy \
-  -v $(pwd)/zond.yml:/app/zond.yml \
-  ghcr.io/spy4x/zond:latest
-```
-
-The container image includes a `HEALTHCHECK` that calls `zond -healthcheck`,
-which connects to the listening socket. The compose healthcheck can remain a
-pure HTTP probe (`wget --spider`) or be replaced with `CMD-SHELL`-less form —
-either works.
-
-## Compile (standalone)
-
-```bash
-go build -trimpath -ldflags="-s -w" -o zond ./cmd/zond
-./zond
-./zond -healthcheck && echo alive
-```
+There is no authentication, by design: the answers carry nothing to protect.
+Why, and the full contract: [how-it-works.md](docs/how-it-works.md#why-no-authentication),
+[api.md](docs/api.md). Every option: [configuration.md](docs/configuration.md).
 
 ## Development
 
 ```bash
-go test ./...            # unit tests
-go test -race ./...      # race detector
-go vet ./...             # static analysis
-gofmt -l .               # formatting check (empty = clean)
-go build ./...           # compile everything
+go test -race ./...
+go vet ./... && gofmt -l .
 ```
 
-## Architecture
+The full command list is in [how-it-works.md](docs/how-it-works.md#development).
 
-```
-cmd/zond/main.go              — entrypoint, -healthcheck flag, http.Server lifecycle
-internal/config/config.go     — YAML + env loader, validation, duplicate-name rejection
-internal/probe/probe.go       — HTTP GET with per-target timeout, parallel fan-out, redirect contract
-internal/probe/drain.go       — bounded body drain for HTTP keep-alive
-internal/server/server.go     — HTTP handlers, routing, response codes
-```
+## Built by
 
-Dependency policy: **stdlib first**, one external dep (`go.yaml.in/yaml/v3`)
-for YAML parsing. No router, no logger lib, no DI framework — Go 1.25 stdlib
-covers it all.
+I'm [Anton Shubin](https://antonshubin.com), a senior full-stack engineer and
+tech lead. zond is one of the small tools I build and run on my own servers.
+Need something like it built for your product?
+[That's my day job →](https://antonshubin.com)
 
-## Why not TCP checks?
+Licensed under [MIT](LICENSE). Copyright (c) 2026 Anton Shubin.
 
-TCP checks (`tcp://hl-metube:8081`) confirm a port is open. Zond performs
-a real HTTP request and validates the response — catching cases where the
-process is listening but returning 5xx errors.
+---
 
-## Why no authentication?
-
-Zond returns only `ok` or `ko`. No data to protect, no session to steal,
-no action to perform. Adding auth would reintroduce the exact problem Zond
-solves. If you must, proxy it through your SSO — but the health endpoint
-itself carries zero risk.
-
-## License
-
-MIT
+Made by Anton Shubin · [antonshubin.com/tools](https://antonshubin.com/tools)
