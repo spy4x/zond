@@ -43,7 +43,7 @@ instead. I run it on my home server; its live status is at
 - **Redirects are healthy.** zond never follows them: a `302` to `/login` is
   up, a `404` is not.
 - **One YAML file.** Or one `ZOND_TARGETS` environment variable. Per-target
-  timeouts, duplicate names rejected at startup.
+  timeouts in YAML, duplicate names rejected at startup.
 - **Small and plain.** A static Go binary on the standard library plus one YAML
   parser, shipped as a distroless, non-root image.
 
@@ -63,7 +63,7 @@ services:
     image: ghcr.io/spy4x/zond:latest
     restart: unless-stopped
     ports: ["8080:8080"]
-    volumes: ["./zond.yml:/app/zond.yml:ro"]
+    volumes: ["./zond.yml:/app/zond.yml:ro,z"]
 ```
 
 ```yaml
