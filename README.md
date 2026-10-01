@@ -119,4 +119,4 @@ Licensed under [MIT](LICENSE). Copyright (c) 2026 Anton Shubin.
 
 ---
 
-Made by Anton Shubin · [antonshubin.com/tools](https://antonshubin.com/tools)
+Made by Anton Shubin · [antonshubin.com/tools/zond](https://antonshubin.com/tools/zond)
