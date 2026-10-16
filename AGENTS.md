@@ -1,4 +1,7 @@
-# AGENTS.md — Zond
+# AGENTS.md — zond
+
+Read `README.md` first. The global agent instructions own Git Flow, review and cleanup; this file
+adds what is specific to this repo.
 
 ## Stack
 
@@ -53,7 +56,6 @@ probes; avoids parser-specific duration strings.
 
 ## Hard rules
 
-- **NEVER commit plaintext secrets, env values, API keys, passwords.**
 - **NEVER break API contract:** `/health/<name>`, `/health`, `/` responses stay backward-compatible
 - **Fail-open principle:** non-critical subsystems (logging) never block primary operation
 - **Single dependency policy:** justify any new third-party dep in PR description; default is stdlib
