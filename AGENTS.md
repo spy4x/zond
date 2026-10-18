@@ -9,7 +9,7 @@ adds what is specific to this repo.
 - **Runtime deps:** `go.yaml.in/yaml/v3` (single external dep)
 - **Stdlib:** `net/http` (Go 1.22+ ServeMux patterns), `log/slog`, `context`, `sync`, `os/signal`, `net`, `flag`, `testing`, `httptest`
 - **Container:** distroless `static-debian12:nonroot` (~10MB)
-- **CI:** Woodpecker on `golang:1.25-alpine`
+- **CI:** Woodpecker on `golang:1.25-alpine`; release images built by kaniko, pushed by crane
 
 ## Invariants
 
@@ -80,6 +80,11 @@ Woodpecker pipeline (`.woodpecker.yml`) on `golang:1.25-alpine`:
 - `gofmt -l .`
 - `go test -race -count=1 ./...` (gcc + musl-dev installed for cgo)
 - `go build ./...`
+
+Pull requests also build the image with kaniko (`--no-push`, no secret). A `vX.Y.Z` tag on a
+commit that is on `main` builds the image and pushes it to `ghcr.io/spy4x/zond` as `vX.Y.Z`,
+`X.Y.Z`, `X.Y` and `latest`, with the `GHCR_PUSH_TOKEN` repo secret (events: tag). A push to
+`main` publishes nothing.
 
 Local dev must pass the same checks before commit.
 

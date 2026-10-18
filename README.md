@@ -9,7 +9,8 @@ monitoring login.**
 [![Docker](https://img.shields.io/badge/docker-ghcr.io%2Fspy4x%2Fzond-blue?logo=docker)](https://github.com/users/spy4x/packages/container/package/zond)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-[**Running in production →**](https://probe-home.antonshubin.com) ·
+[**See its live answer →**](https://probe-home.antonshubin.com) (it answers
+`503` whenever one of my services is down) ·
 [API](docs/api.md) · [Configuration](docs/configuration.md) ·
 [Self-hosting](docs/self-hosting.md) · [How it works](docs/how-it-works.md)
 
@@ -29,8 +30,33 @@ Put an SSO proxy such as Authelia or Authentik in front of your services, and an
 outside monitor like [Gatus](https://github.com/TwiN/gatus) sees a `302` to the
 login page for every one of them. You either count that redirect as healthy or
 give the monitor its own account. zond checks each service from beside it
-instead. I run it on my home server; its live status is at
-[probe-home.antonshubin.com](https://probe-home.antonshubin.com).
+instead. I run it on my home server; its live answer for every service there
+is at [probe-home.antonshubin.com](https://probe-home.antonshubin.com). That page
+answers `503` whenever one of them is down, which is zond doing its job.
+
+This is all a monitor ever sees, from a real run with one service up and one
+down:
+
+```console
+$ curl -i localhost:8080/health/metube
+HTTP/1.1 200 OK
+Content-Type: text/plain; charset=utf-8
+
+ok
+
+$ curl -i localhost:8080/health/jellyfin
+HTTP/1.1 503 Service Unavailable
+Content-Type: text/plain; charset=utf-8
+
+unreachable
+
+$ curl -i localhost:8080/health
+HTTP/1.1 503 Service Unavailable
+Content-Type: text/plain; charset=utf-8
+
+OK metube
+KO jellyfin
+```
 
 ## Why zond
 
@@ -44,8 +70,13 @@ instead. I run it on my home server; its live status is at
   up, a `404` is not.
 - **One YAML file.** Or one `ZOND_TARGETS` environment variable. Per-target
   timeouts in YAML, duplicate names rejected at startup.
+- **Plain HTTP, nothing proprietary.** Status codes and `text/plain` answers,
+  so any monitor reads them: Gatus, Uptime Kuma, or `curl` in a cron job.
 - **Small and plain.** A static Go binary on the standard library plus one YAML
   parser, shipped as a distroless, non-root image.
+- **Runs where your services run.** The published image is `linux/amd64`, for
+  any Docker or Podman host. On another architecture, `docker build .` makes
+  your own from the same Dockerfile.
 
 **Use it if** an SSO proxy stands between your monitor and your self-hosted
 services. **Skip it if** your monitor already runs inside that network, or you
@@ -119,4 +150,4 @@ Licensed under [MIT](LICENSE). Copyright (c) 2026 Anton Shubin.
 
 ---
 
-Made by Anton Shubin · [antonshubin.com/tools/zond](https://antonshubin.com/tools/zond)
+Made by Anton Shubin · [antonshubin.com/tools](https://antonshubin.com/tools/zond)
