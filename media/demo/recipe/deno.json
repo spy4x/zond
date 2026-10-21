@@ -1,0 +1,17 @@
+{
+  "imports": {
+    "@spy4x/platform": "jsr:@spy4x/platform@1.28.0",
+    "playwright": "npm:playwright@1.63.0"
+  },
+  "compilerOptions": {
+    "lib": [
+      "deno.ns",
+      "dom",
+      "esnext"
+    ]
+  },
+  "fmt": {
+    "semiColons": false,
+    "lineWidth": 100
+  }
+}

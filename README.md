@@ -19,6 +19,8 @@ monitoring login.**
   <img src="docs/diagram-light.svg" alt="You reach metube through the SSO proxy. Gatus, in the cloud, asks zond for /health/metube instead. zond runs on the same Docker network as metube, sends it a plain HTTP GET without logging in, and answers Gatus with 200 ok or 503." width="800">
 </picture>
 
+<a href="https://antonshubin.com/tools/zond"><img src="media/demo/poster.webp" alt="Play the one-minute demo: zond's config in a terminal, two services added in nano, zond started with docker compose and asked about metube (200 OK), then a browser asking about grafana, which is down (503), and about every service at once." width="800"></a>
+
 </div>
 
 Your monitor asks `https://zond.example.com/health/metube`. zond, running on the
