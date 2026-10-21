@@ -43,7 +43,7 @@ compose up -d hl-metube hl-ollama >/dev/null 2>&1
 
 # A clean shell: no environment, profile or rc of the recorder's, and a staged, empty HOME.
 THEME='{"background":"#15120f","foreground":"#efebe2","cursor":"#efebe2","cursorAccent":"#15120f","selectionBackground":"#413c38","black":"#15120f","red":"#f87e77","green":"#83d494","yellow":"#e9c46a","blue":"#8ec5ec","magenta":"#d4a5e8","cyan":"#8ec5ec","white":"#efebe2","brightBlack":"#857f79","brightRed":"#f87e77","brightGreen":"#83d494","brightYellow":"#e9c46a","brightBlue":"#8ec5ec","brightMagenta":"#d4a5e8","brightCyan":"#8ec5ec","brightWhite":"#ffffff"}'
-(cd "$S/stack" && exec timeout 2400 ttyd -i 127.0.0.1 -p "$PORT" -W -o \
+(cd "$S/stack" && exec timeout 2400 ttyd -i 127.0.0.1 -p "$PORT" -W -O -o \
   -t fontSize=22 -t fontFamily=Hack -t lineHeight=1.25 -t cursorBlink=false \
   -t rendererType=dom -t disableLeaveAlert=true -t disableResizeOverlay=true \
   -t "theme=$THEME" \

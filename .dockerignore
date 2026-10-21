@@ -12,4 +12,5 @@ zond.yaml
 Dockerfile
 .dockerignore
 .woodpecker.yml
-LICENSEmedia
+LICENSE
+media
