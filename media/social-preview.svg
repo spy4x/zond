@@ -1,9 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" font-family="Inter, Helvetica, Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
 <rect width="1280" height="640" fill="#0d1117"/>
-<text x="140" y="130" fill="#f0f6fc" font-size="88" font-weight="700">zond</text>
-<text x="140" y="188" fill="#9198a1" font-size="34">Health checks for self-hosted services behind an SSO proxy,</text>
-<text x="140" y="232" fill="#9198a1" font-size="34">without a monitoring login.</text>
-<svg x="140" y="250" viewBox="0 0 1000 400" width="1000" height="400" role="img" aria-labelledby="title desc" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+<text x="215" y="120" fill="#f0f6fc" font-size="80" font-weight="700">zond</text>
+<text x="215" y="172" fill="#9198a1" font-size="30">Health checks for self-hosted services behind an SSO proxy,</text>
+<text x="215" y="212" fill="#9198a1" font-size="30">without a monitoring login.</text>
+<svg x="215" y="246" viewBox="0 0 1000 400" width="850" height="340" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
   <defs>
     <marker id="arrow-muted" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
       <path d="M0 0 L10 5 L0 10 z" fill="#9198a1"/>
