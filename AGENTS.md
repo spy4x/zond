@@ -100,3 +100,12 @@ regenerate the dark one with the colour swap below, so they never drift.
 ```bash
 sed -e 's/#59636e/#9198a1/g; s/#1f2328/#f0f6fc/g; s/#f6f8fa/#151b23/g; s/#d1d9e0/#3d444d/g; s/#ddf4ff/#0c2d6b/g; s/#0969da/#4493f8/g' docs/diagram-light.svg > docs/diagram-dark.svg
 ```
+
+`media/social-preview.png` (1280×640) is the GitHub social preview. Its source,
+`media/social-preview.svg`, holds the title, the tagline and a copy of `docs/diagram-dark.svg`, so
+update that copy when the diagram changes. Render it, then upload the PNG by hand in the
+repository's Settings → General → Social preview, since GitHub has no API for it:
+
+```bash
+magick -density 96 media/social-preview.svg -resize 1280x640! media/social-preview.png
+```
